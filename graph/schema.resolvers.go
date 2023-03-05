@@ -23,20 +23,39 @@ func (r *queryResolver) Todos(ctx context.Context) ([]*model.Todo, error) {
 			ID:   "T1",
 			Text: "t1",
 			Done: false,
-			User: &model.User{
-				ID:   "U1",
-				Name: "u1",
-			},
+			User: nil,
 		},
 		{
 			ID:   "T2",
 			Text: "t2",
 			Done: true,
-			User: &model.User{
-				ID:   "U2",
-				Name: "u2",
-			},
+			User: nil,
 		},
+		{
+			ID:   "T3",
+			Text: "t3",
+			Done: true,
+			User: nil,
+		},
+	}, nil
+}
+
+// User is the resolver for the user field.
+func (r *todoResolver) User(ctx context.Context, obj *model.Todo) (*model.User, error) {
+	if obj.ID == "T1" {
+		return &model.User{
+			ID:   "U1",
+			Name: "u1",
+		}, nil
+	} else if obj.ID == "T2" {
+		return &model.User{
+			ID:   "U2",
+			Name: "u2",
+		}, nil
+	}
+	return &model.User{
+		ID:   "U3",
+		Name: "u3",
 	}, nil
 }
 
@@ -46,5 +65,9 @@ func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
+// Todo returns TodoResolver implementation.
+func (r *Resolver) Todo() TodoResolver { return &todoResolver{r} }
+
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type todoResolver struct{ *Resolver }
