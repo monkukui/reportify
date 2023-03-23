@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/jlwt90/gqlgen-usage-analysis/extension"
 	"log"
 	"net/http"
 	"os"
@@ -28,6 +29,8 @@ func main() {
 		return next(ctx)
 	}
 	srv := handler.NewDefaultServer(graph.NewExecutableSchema(c))
+	srv.Use(extension.AuditLogger{Writer: os.Stdout})
+	srv.Use(extension.Analytics{Writer: os.Stdout})
 
 	http.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	http.Handle("/query", srv)
