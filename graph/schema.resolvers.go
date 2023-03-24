@@ -40,6 +40,34 @@ func (r *queryResolver) Todos(ctx context.Context) ([]*model.Todo, error) {
 	}, nil
 }
 
+// Todo is the resolver for the todo field.
+func (r *queryResolver) Todo(ctx context.Context, id string) (*model.Todo, error) {
+	var obj *model.Todo
+	if id == "T1" {
+		obj = &model.Todo{
+			ID:   "T1",
+			Text: "t1",
+			Done: false,
+			User: nil,
+		}
+	} else if id == "T2" {
+		obj = &model.Todo{
+			ID:   "T2",
+			Text: "t2",
+			Done: true,
+			User: nil,
+		}
+	} else if id == "T3" {
+		obj = &model.Todo{
+			ID:   "T3",
+			Text: "t3",
+			Done: true,
+			User: nil,
+		}
+	}
+	return obj, nil
+}
+
 // User is the resolver for the user field.
 func (r *todoResolver) User(ctx context.Context, obj *model.Todo) (*model.User, error) {
 	if obj.ID == "T1" {

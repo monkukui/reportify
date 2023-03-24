@@ -30,7 +30,6 @@ func main() {
 	}
 	srv := handler.NewDefaultServer(graph.NewExecutableSchema(c))
 	srv.Use(extension.AuditLogger{Writer: os.Stdout})
-	srv.Use(extension.Analytics{Writer: os.Stdout})
 
 	http.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	http.Handle("/query", srv)
