@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/99designs/gqlgen/graphql"
-	"github.com/vektah/gqlparser/v2/gqlerror"
 	"io"
 )
 
@@ -16,7 +15,7 @@ type AuditLogger struct {
 }
 
 var _ interface {
-	graphql.OperationContextMutator
+	//graphql.OperationInterceptor
 	graphql.FieldInterceptor
 	graphql.ResponseInterceptor
 	graphql.HandlerExtension
@@ -54,21 +53,32 @@ func (a AuditLogger) Validate(_ graphql.ExecutableSchema) error {
 	return nil
 }
 
-func (a AuditLogger) MutateOperationContext(_ context.Context, rc *graphql.OperationContext) *gqlerror.Error {
-	m := &MetaData{
-		Resolvers: map[string]bool{},
-		Tags: map[string]map[string]bool{
-			"hasRole": {},
-			"lang":    {},
-		},
-	}
-	rc.Stats.SetExtension(auditLoggerExtension, m)
-	return nil
-}
+//func (a AuditLogger) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
+//	op := graphql.GetOperationContext(ctx)
+//	m := &MetaData{
+//		Resolvers: map[string]bool{},
+//		Tags: map[string]map[string]bool{
+//			"hasRole": {},
+//			"lang":    {},
+//		},
+//	}
+//	op.Stats.SetExtension(auditLoggerExtension, m)
+//	return next(ctx)
+//}
 
 func (a AuditLogger) InterceptField(ctx context.Context, next graphql.Resolver) (res interface{}, err error) {
 	op := graphql.GetOperationContext(ctx)
-	m := op.Stats.GetExtension(auditLoggerExtension).(*MetaData)
+	m, ok := op.Stats.GetExtension(auditLoggerExtension).(*MetaData)
+	if !ok {
+		m = &MetaData{
+			Resolvers: map[string]bool{},
+			Tags: map[string]map[string]bool{
+				"hasRole": {},
+				"lang":    {},
+			},
+		}
+		op.Stats.SetExtension(auditLoggerExtension, m)
+	}
 
 	fc := graphql.GetFieldContext(ctx)
 	callBy := fc.Object
@@ -98,7 +108,18 @@ func (a AuditLogger) InterceptResponse(ctx context.Context, next graphql.Respons
 		op := graphql.GetOperationContext(ctx)
 		operationName, _ := a.getOperation(ctx)
 
-		m := op.Stats.GetExtension(auditLoggerExtension).(*MetaData)
+		m, ok := op.Stats.GetExtension(auditLoggerExtension).(*MetaData)
+		if !ok {
+			m = &MetaData{
+				Resolvers: map[string]bool{},
+				Tags: map[string]map[string]bool{
+					"hasRole": {},
+					"lang":    {},
+				},
+			}
+			op.Stats.SetExtension(auditLoggerExtension, m)
+		}
+
 		tags := make(map[string][]string, len(m.Tags))
 		for k, v := range m.Tags {
 			tags[k] = a.keysOf(v)
@@ -138,13 +159,20 @@ func (a AuditLogger) getOperation(ctx context.Context) (name, opType string) {
 
 	op := graphql.GetOperationContext(ctx)
 	name = "unnamed operation"
-	if op != nil && op.Operation != nil {
-		op := op.Operation
-		if op.Name != "" {
-			name = op.Name
-		}
-		if op.Operation != "" {
-			opType = string(op.Operation)
+	if op != nil {
+		// query & mutation
+		if op.Operation != nil {
+			op := op.Operation
+			if op.Name != "" {
+				name = op.Name
+			}
+			if op.Operation != "" {
+				opType = string(op.Operation)
+			}
+		} else {
+			// subscription
+			name = op.OperationName
+			opType = "subscription"
 		}
 	}
 

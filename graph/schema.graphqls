@@ -30,3 +30,15 @@ input NewTodo {
 type Mutation {
   createTodo(input: NewTodo! @lang(region: "JP")): Todo! @hasRole(id: "r1")
 }
+
+type Time {
+  unixTime: Int!
+  timeStamp: String!
+}
+
+type Subscription {
+  """
+  `currentTime` will return a stream of `Time` objects.
+  """
+  currentTime: Time!
+}
