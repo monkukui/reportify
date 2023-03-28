@@ -31,13 +31,13 @@ type DataPayload struct {
 }
 
 type MetaData struct {
-	Resolvers map[string]bool
-	Tags      map[string]map[string]bool
+	Resolvers map[string]int
+	Tags      map[string]map[string]int
 }
 
 type Meta struct {
-	Resolvers []string
-	Tags      map[string][]string
+	Resolvers map[string]int
+	Tags      map[string]map[string]int
 }
 
 type AuditLog struct {
@@ -71,8 +71,8 @@ func (a AuditLogger) InterceptField(ctx context.Context, next graphql.Resolver) 
 	m, ok := op.Stats.GetExtension(auditLoggerExtension).(*MetaData)
 	if !ok {
 		m = &MetaData{
-			Resolvers: map[string]bool{},
-			Tags: map[string]map[string]bool{
+			Resolvers: map[string]int{},
+			Tags: map[string]map[string]int{
 				"hasRole": {},
 				"lang":    {},
 			},
@@ -87,16 +87,22 @@ func (a AuditLogger) InterceptField(ctx context.Context, next graphql.Resolver) 
 
 	if fc.IsResolver {
 		if callBy == "Query" || callBy == "Mutation" || callBy == "Subscription" {
-			if _, found := m.Resolvers[key]; !found {
-				m.Resolvers[key] = true
+			v, found := m.Resolvers[key]
+			if found {
+				m.Resolvers[key] = v + 1
+			} else {
+				m.Resolvers[key] = 1
 			}
 		}
 	}
 	def := fc.Field.Definition
 	if def.Directives.ForName("hasRole") != nil {
 		if v, found := m.Tags["hasRole"]; found {
-			if _, found = v[key]; !found {
-				v[key] = true
+			u, found := v[key]
+			if found {
+				v[key] = u + 1
+			} else {
+				v[key] = 1
 			}
 		}
 	}
@@ -111,18 +117,13 @@ func (a AuditLogger) InterceptResponse(ctx context.Context, next graphql.Respons
 		m, ok := op.Stats.GetExtension(auditLoggerExtension).(*MetaData)
 		if !ok {
 			m = &MetaData{
-				Resolvers: map[string]bool{},
-				Tags: map[string]map[string]bool{
+				Resolvers: map[string]int{},
+				Tags: map[string]map[string]int{
 					"hasRole": {},
 					"lang":    {},
 				},
 			}
 			op.Stats.SetExtension(auditLoggerExtension, m)
-		}
-
-		tags := make(map[string][]string, len(m.Tags))
-		for k, v := range m.Tags {
-			tags[k] = a.keysOf(v)
 		}
 
 		log := AuditLog{
@@ -132,8 +133,8 @@ func (a AuditLogger) InterceptResponse(ctx context.Context, next graphql.Respons
 				Variables: op.Variables,
 			},
 			Meta: Meta{
-				Resolvers: a.keysOf(m.Resolvers),
-				Tags:      tags,
+				Resolvers: m.Resolvers,
+				Tags:      m.Tags,
 			},
 		}
 		a.logRequest(log)
