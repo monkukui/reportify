@@ -87,9 +87,9 @@ func (a AuditLogger) InterceptField(ctx context.Context, next graphql.Resolver) 
 
 	if fc.IsResolver {
 		if callBy == "Query" || callBy == "Mutation" || callBy == "Subscription" {
-			v, found := m.Resolvers[key]
+			_, found := m.Resolvers[key]
 			if found {
-				m.Resolvers[key] = v + 1
+				m.Resolvers[key]++
 			} else {
 				m.Resolvers[key] = 1
 			}
@@ -98,9 +98,9 @@ func (a AuditLogger) InterceptField(ctx context.Context, next graphql.Resolver) 
 	def := fc.Field.Definition
 	if def.Directives.ForName("hasRole") != nil {
 		if v, found := m.Tags["hasRole"]; found {
-			u, found := v[key]
+			_, found := v[key]
 			if found {
-				v[key] = u + 1
+				v[key]++
 			} else {
 				v[key] = 1
 			}
