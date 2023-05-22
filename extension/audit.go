@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/99designs/gqlgen/graphql"
+	"go.uber.org/atomic"
 	"io"
+	"strings"
+	"sync"
 )
 
 const auditLoggerExtension = "AuditLogger"
@@ -31,8 +34,8 @@ type DataPayload struct {
 }
 
 type MetaData struct {
-	Resolvers map[string]int
-	Tags      map[string]map[string]int
+	Resolvers *sync.Map
+	Tags      *sync.Map
 }
 
 type Meta struct {
@@ -53,31 +56,21 @@ func (a AuditLogger) Validate(_ graphql.ExecutableSchema) error {
 	return nil
 }
 
-//func (a AuditLogger) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
-//	op := graphql.GetOperationContext(ctx)
-//	m := &MetaData{
-//		Resolvers: map[string]bool{},
-//		Tags: map[string]map[string]bool{
-//			"hasRole": {},
-//			"lang":    {},
-//		},
-//	}
-//	op.Stats.SetExtension(auditLoggerExtension, m)
-//	return next(ctx)
-//}
+func (a AuditLogger) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
+	op := graphql.GetOperationContext(ctx)
+	m := &MetaData{
+		Resolvers: &sync.Map{},
+		Tags:      &sync.Map{},
+	}
+	op.Stats.SetExtension(auditLoggerExtension, m)
+	return next(ctx)
+}
 
 func (a AuditLogger) InterceptField(ctx context.Context, next graphql.Resolver) (res interface{}, err error) {
 	op := graphql.GetOperationContext(ctx)
 	m, ok := op.Stats.GetExtension(auditLoggerExtension).(*MetaData)
 	if !ok {
-		m = &MetaData{
-			Resolvers: map[string]int{},
-			Tags: map[string]map[string]int{
-				"hasRole": {},
-				"lang":    {},
-			},
-		}
-		op.Stats.SetExtension(auditLoggerExtension, m)
+		fmt.Println("[InterceptField] no extension context")
 	}
 
 	fc := graphql.GetFieldContext(ctx)
@@ -87,23 +80,17 @@ func (a AuditLogger) InterceptField(ctx context.Context, next graphql.Resolver) 
 
 	if fc.IsResolver {
 		if callBy == "Query" || callBy == "Mutation" || callBy == "Subscription" {
-			_, found := m.Resolvers[key]
-			if found {
-				m.Resolvers[key]++
-			} else {
-				m.Resolvers[key] = 1
+			val, _ := m.Resolvers.LoadOrStore(key, &atomic.Int32{})
+			if v, ok := val.(*atomic.Int32); ok {
+				v.Add(1)
 			}
 		}
 	}
 	def := fc.Field.Definition
 	if def.Directives.ForName("hasRole") != nil {
-		if v, found := m.Tags["hasRole"]; found {
-			_, found := v[key]
-			if found {
-				v[key]++
-			} else {
-				v[key] = 1
-			}
+		val, _ := m.Tags.LoadOrStore("hasRole"+"|"+key, &atomic.Int32{})
+		if v, ok := val.(*atomic.Int32); ok {
+			v.Add(1)
 		}
 	}
 	return next(ctx)
@@ -116,15 +103,48 @@ func (a AuditLogger) InterceptResponse(ctx context.Context, next graphql.Respons
 
 		m, ok := op.Stats.GetExtension(auditLoggerExtension).(*MetaData)
 		if !ok {
-			m = &MetaData{
-				Resolvers: map[string]int{},
-				Tags: map[string]map[string]int{
-					"hasRole": {},
-					"lang":    {},
-				},
-			}
-			op.Stats.SetExtension(auditLoggerExtension, m)
+			fmt.Println("[InterceptResoponse] No extension context")
 		}
+
+		resolvers := make(map[string]int)
+		m.Resolvers.Range(func(key, value any) bool {
+			k, ok := key.(string)
+			if !ok {
+				fmt.Println(fmt.Sprintf("cannot cast key(%v) to string", k))
+				return false
+			}
+			v, ok := value.(*atomic.Int32)
+			if !ok {
+				fmt.Println(fmt.Sprintf("cannot cast value(%v) to string", v))
+				return false
+			}
+			resolvers[k] = int(v.Load())
+			return true
+		})
+		tags := make(map[string]map[string]int)
+		tags["hasRole"] = make(map[string]int)
+		tags["lang"] = make(map[string]int)
+		m.Tags.Range(func(key, value any) bool {
+			k, ok := key.(string)
+			if !ok {
+				fmt.Println(fmt.Sprintf("cannot cast key(%v) to string", k))
+				return false
+			}
+			v, ok := value.(*atomic.Int32)
+			if !ok {
+				fmt.Println(fmt.Sprintf("cannot cast key(%v) to *atomic.Int32", k))
+				return false
+			}
+
+			s := strings.Split(k, "|")
+			if len(s) != 2 {
+				fmt.Println(fmt.Sprintf("the length of the secuences splited by '|' should be 2, but it is actually %d", len(s)))
+				return false
+			}
+
+			tags[s[0]][s[1]] = int(v.Load())
+			return true
+		})
 
 		log := AuditLog{
 			GraphQLOperation: operationName,
@@ -133,8 +153,8 @@ func (a AuditLogger) InterceptResponse(ctx context.Context, next graphql.Respons
 				Variables: op.Variables,
 			},
 			Meta: Meta{
-				Resolvers: m.Resolvers,
-				Tags:      m.Tags,
+				Resolvers: resolvers,
+				Tags:      tags,
 			},
 		}
 		a.logRequest(log)
