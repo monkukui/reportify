@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/99designs/gqlgen v0.17.25
 	github.com/vektah/gqlparser/v2 v2.5.1
+	go.uber.org/atomic v1.11.0
 )
 
 require (
